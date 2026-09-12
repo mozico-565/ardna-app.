@@ -37,4 +37,4 @@ jobs:
         working-directory: project/ardna-app/android
         run: |
           chmod +x gradlew
-          ./
+          bash gradlew assembleDebug --stacktrace
