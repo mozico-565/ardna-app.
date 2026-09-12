@@ -25,7 +25,7 @@ jobs:
 
       - name: Extract project
         run: |
-          unzip -q ardna-app-with-apk-workflow.zip -d project
+          unzip -q Ardna-v2.1.0.zip -d project
 
       - name: Install and prepare Android
         working-directory: project/ardna-app
