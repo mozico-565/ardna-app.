@@ -1,0 +1,40 @@
+name: Build Ardna APK
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download project
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Extract project
+        run: |
+          unzip -q ardna-app-with-apk-workflow.zip -d project
+
+      - name: Install and prepare Android
+        working-directory: project/ardna-app
+        run: |
+          npm ci
+          npm run android:sync
+
+      - name: Build APK
+        working-directory: project/ardna-app/android
+        run: |
+          chmod +x gradlew
+          ./
