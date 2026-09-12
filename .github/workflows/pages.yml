@@ -25,7 +25,7 @@ jobs:
 
       - name: Extract and build
         run: |
-          unzip -q ardna-app-with-apk-workflow.zip -d project
+          unzip -q Ardna-v2.1.0.zip -d project
           cd project/ardna-app
           npm ci
           npm run build
