@@ -40,8 +40,10 @@ jobs:
         id: project
         shell: bash
         run: |
+          rm -rf project
           mkdir -p project
-          unzip -q Ardna-v3.2.0-security.zip -d project
+
+          unzip -q Ardna-v3.3.0-global-polish-source.zip -d project
 
           ROOT="$(find project \
             -type f \
