@@ -40,13 +40,8 @@ jobs:
         id: project
         shell: bash
         run: |
-          rm -rf project
           mkdir -p project
-
-          unzip -q Ardna-v3.1.0-secure.zip -d project
-
-          echo "=== Extracted structure ==="
-          find project -maxdepth 3 -type f | head -100
+          unzip -q Ardna-v3.2.0-security.zip -d project
 
           ROOT="$(find project \
             -type f \
