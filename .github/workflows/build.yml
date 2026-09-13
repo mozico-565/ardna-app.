@@ -18,45 +18,75 @@ jobs:
       VITE_GOOGLE_AUTH_ENABLED: ${{ vars.VITE_GOOGLE_AUTH_ENABLED }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: "22"
 
-      - uses: actions/setup-java@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-      - name: Extract project
-        run: unzip -q Ardna-v3.1.0-secure.zip -d project
+      - name: Extract project and detect root
+        id: project
+        shell: bash
+        run: |
+          rm -rf project
+          mkdir -p project
+
+          unzip -q Ardna-v3.1.0-secure.zip -d project
+
+          echo "=== Extracted structure ==="
+          find project -maxdepth 3 -type f | head -100
+
+          ROOT="$(find project \
+            -type f \
+            -name package.json \
+            -not -path '*/node_modules/*' \
+            -printf '%h\n' \
+            | head -n 1)"
+
+          if [ -z "$ROOT" ]; then
+            echo "ERROR: package.json not found"
+            exit 1
+          fi
+
+          echo "Detected project root: $ROOT"
+          echo "root=$ROOT" >> "$GITHUB_OUTPUT"
 
       - name: Validate configuration
-        working-directory: project/ardna-app
-        run: node scripts/validate-config.mjs
+        run: |
+          cd "${{ steps.project.outputs.root }}"
+          node scripts/validate-config.mjs
 
       - name: Install dependencies
-        working-directory: project/ardna-app
-        run: npm ci
+        run: |
+          cd "${{ steps.project.outputs.root }}"
+          npm ci
 
       - name: Run tests
-        working-directory: project/ardna-app
-        run: npm test
+        run: |
+          cd "${{ steps.project.outputs.root }}"
+          npm test
 
       - name: Build and sync Android
-        working-directory: project/ardna-app
-        run: npm run android:sync
+        run: |
+          cd "${{ steps.project.outputs.root }}"
+          npm run android:sync
 
       - name: Build APK
-        working-directory: project/ardna-app/android
-        run: bash gradlew assembleDebug --stacktrace
+        run: |
+          cd "${{ steps.project.outputs.root }}/android"
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Ardna-v3.1.0-APK
-          path: project/ardna-app/android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+        uses: actions
