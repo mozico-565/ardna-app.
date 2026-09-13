@@ -89,11 +89,11 @@ jobs:
           test -n "$ARDNA_KEY_ALIAS" || { echo "Missing ARDNA_KEY_ALIAS"; exit 1; }
           test -n "$ARDNA_KEY_PASSWORD" || { echo "Missing ARDNA_KEY_PASSWORD"; exit 1; }
 
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "${{ steps.project.outputs.root }}/android/ardna-release.keystore"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "${GITHUB_WORKSPACE}/${{ steps.project.outputs.root }}/android/ardna-release.keystore"
 
       - name: Build signed Release APK and AAB
         env:
-          ARDNA_KEYSTORE_FILE: ${{ steps.project.outputs.root }}/android/ardna-release.keystore
+          ARDNA_KEYSTORE_FILE: ${{ github.workspace }}/${{ steps.project.outputs.root }}/android/ardna-release.keystore
           ARDNA_STORE_PASSWORD: ${{ secrets.ARDNA_STORE_PASSWORD }}
           ARDNA_KEY_ALIAS: ${{ secrets.ARDNA_KEY_ALIAS }}
           ARDNA_KEY_PASSWORD: ${{ secrets.ARDNA_KEY_PASSWORD }}
