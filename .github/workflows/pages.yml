@@ -35,7 +35,7 @@ jobs:
           node-version: "22"
 
       - name: Extract project
-        run: unzip -q Ardna-v3.0.0.zip -d project
+        run: unzip -q Ardna-v3.1.0.zip -d project
 
       - name: Validate configuration
         working-directory: project/ardna-app
