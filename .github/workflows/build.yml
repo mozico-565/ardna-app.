@@ -39,13 +39,8 @@ jobs:
         id: project
         shell: bash
         run: |
-          rm -rf project
           mkdir -p project
-
-          unzip -q Ardna-v3.1.0-secure.zip -d project
-
-          echo "=== Extracted structure ==="
-          find project -maxdepth 3 -type f | head -100
+          unzip -q Ardna-v3.2.0-security.zip -d project
 
           ROOT="$(find project \
             -type f \
@@ -82,15 +77,36 @@ jobs:
           cd "${{ steps.project.outputs.root }}"
           npm run android:sync
 
-      - name: Build APK
+      - name: Prepare release signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ARDNA_KEYSTORE_BASE64 }}
+          ARDNA_STORE_PASSWORD: ${{ secrets.ARDNA_STORE_PASSWORD }}
+          ARDNA_KEY_ALIAS: ${{ secrets.ARDNA_KEY_ALIAS }}
+          ARDNA_KEY_PASSWORD: ${{ secrets.ARDNA_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_BASE64" || { echo "Missing ARDNA_KEYSTORE_BASE64"; exit 1; }
+          test -n "$ARDNA_STORE_PASSWORD" || { echo "Missing ARDNA_STORE_PASSWORD"; exit 1; }
+          test -n "$ARDNA_KEY_ALIAS" || { echo "Missing ARDNA_KEY_ALIAS"; exit 1; }
+          test -n "$ARDNA_KEY_PASSWORD" || { echo "Missing ARDNA_KEY_PASSWORD"; exit 1; }
+
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "${{ steps.project.outputs.root }}/android/ardna-release.keystore"
+
+      - name: Build signed Release APK and AAB
+        env:
+          ARDNA_KEYSTORE_FILE: ${{ steps.project.outputs.root }}/android/ardna-release.keystore
+          ARDNA_STORE_PASSWORD: ${{ secrets.ARDNA_STORE_PASSWORD }}
+          ARDNA_KEY_ALIAS: ${{ secrets.ARDNA_KEY_ALIAS }}
+          ARDNA_KEY_PASSWORD: ${{ secrets.ARDNA_KEY_PASSWORD }}
         run: |
           cd "${{ steps.project.outputs.root }}/android"
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleRelease bundleRelease --stacktrace
 
-      - name: Upload APK
+      - name: Upload signed Android files
         uses: actions/upload-artifact@v4
         with:
-          name: Ardna-v3.1.0-APK
-          path: ${{ steps.project.outputs.root }}/android/app/build/outputs/apk/debug/app-debug.apk
+          name: Ardna-v3.2.0-signed-release
+          path: |
+            ${{ steps.project.outputs.root }}/android/app/build/outputs/apk/release/app-release.apk
+            ${{ steps.project.outputs.root }}/android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
