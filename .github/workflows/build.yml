@@ -39,8 +39,10 @@ jobs:
         id: project
         shell: bash
         run: |
+          rm -rf project
           mkdir -p project
-          unzip -q Ardna-v3.2.0-security.zip -d project
+
+          unzip -q Ardna-v3.3.0-global-polish-source.zip -d project
 
           ROOT="$(find project \
             -type f \
@@ -89,7 +91,9 @@ jobs:
           test -n "$ARDNA_KEY_ALIAS" || { echo "Missing ARDNA_KEY_ALIAS"; exit 1; }
           test -n "$ARDNA_KEY_PASSWORD" || { echo "Missing ARDNA_KEY_PASSWORD"; exit 1; }
 
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "${GITHUB_WORKSPACE}/${{ steps.project.outputs.root }}/android/ardna-release.keystore"
+          printf '%s' "$KEYSTORE_BASE64" |
+            base64 --decode \
+            > "${{ steps.project.outputs.root }}/android/ardna-release.keystore"
 
       - name: Build signed Release APK and AAB
         env:
@@ -105,7 +109,7 @@ jobs:
       - name: Upload signed Android files
         uses: actions/upload-artifact@v4
         with:
-          name: Ardna-v3.2.0-signed-release
+          name: Ardna-v3.3.0-signed-release
           path: |
             ${{ steps.project.outputs.root }}/android/app/build/outputs/apk/release/app-release.apk
             ${{ steps.project.outputs.root }}/android/app/build/outputs/bundle/release/app-release.aab
