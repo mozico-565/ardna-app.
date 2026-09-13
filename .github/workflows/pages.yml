@@ -28,36 +28,68 @@ jobs:
       VITE_GOOGLE_AUTH_ENABLED: ${{ vars.VITE_GOOGLE_AUTH_ENABLED }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: "22"
 
-      - name: Extract project
-        run: unzip -q Ardna-v3.1.0-secure.zip -d project
+      - name: Extract project and detect root
+        id: project
+        shell: bash
+        run: |
+          rm -rf project
+          mkdir -p project
+
+          unzip -q Ardna-v3.1.0-secure.zip -d project
+
+          echo "=== Extracted structure ==="
+          find project -maxdepth 3 -type f | head -100
+
+          ROOT="$(find project \
+            -type f \
+            -name package.json \
+            -not -path '*/node_modules/*' \
+            -printf '%h\n' \
+            | head -n 1)"
+
+          if [ -z "$ROOT" ]; then
+            echo "ERROR: package.json not found"
+            exit 1
+          fi
+
+          echo "Detected project root: $ROOT"
+          echo "root=$ROOT" >> "$GITHUB_OUTPUT"
 
       - name: Validate configuration
-        working-directory: project/ardna-app
-        run: node scripts/validate-config.mjs
+        run: |
+          cd "${{ steps.project.outputs.root }}"
+          node scripts/validate-config.mjs
 
       - name: Install dependencies
-        working-directory: project/ardna-app
-        run: npm ci
+        run: |
+          cd "${{ steps.project.outputs.root }}"
+          npm ci
 
       - name: Run tests
-        working-directory: project/ardna-app
-        run: npm test
+        run: |
+          cd "${{ steps.project.outputs.root }}"
+          npm test
 
       - name: Build website
-        working-directory: project/ardna-app
-        run: npm run build
+        run: |
+          cd "${{ steps.project.outputs.root }}"
+          npm run build
 
-      - uses: actions/configure-pages@v5
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
 
-      - uses: actions/upload-pages-artifact@v3
+      - name: Upload website
+        uses: actions/upload-pages-artifact@v3
         with:
-          path: project/ardna-app/dist
+          path: ${{ steps.project.outputs.root }}/dist
 
       - name: Publish
         id: deployment
