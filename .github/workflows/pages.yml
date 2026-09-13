@@ -1,4 +1,4 @@
-name: Publish Ardna Website
+name: Build Ardna APK
 
 on:
   push:
@@ -6,15 +6,16 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      VITE_PUBLIC_APP_URL: ${{ vars.VITE_PUBLIC_APP_URL }}
+      VITE_GOOGLE_AUTH_ENABLED: ${{ vars.VITE_GOOGLE_AUTH_ENABLED }}
 
     steps:
       - uses: actions/checkout@v4
@@ -23,19 +24,39 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Extract and build
-        run: |
-          unzip -q Ardna-v2.2.0.zip -d project
-          cd project/ardna-app
-          npm ci
-          npm run build
-
-      - uses: actions/configure-pages@v5
-
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/setup-java@v4
         with:
-          path: project/ardna-app/dist
+          distribution: temurin
+          java-version: "21"
 
-      - name: Publish
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Extract project
+        run: unzip -q Ardna-v3.0.0.zip -d project
+
+      - name: Validate configuration
+        working-directory: project/ardna-app
+        run: node scripts/validate-config.mjs
+
+      - name: Install dependencies
+        working-directory: project/ardna-app
+        run: npm ci
+
+      - name: Run tests
+        working-directory: project/ardna-app
+        run: npm test
+
+      - name: Build and sync Android
+        working-directory: project/ardna-app
+        run: npm run android:sync
+
+      - name: Build APK
+        working-directory: project/ardna-app/android
+        run: bash gradlew assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ardna-v3.0.0-APK
+          path: project/ardna-app/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
