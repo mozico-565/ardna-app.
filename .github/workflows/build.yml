@@ -1,14 +1,19 @@
-name: Build Ardna APK
+name: Build Ardna v3.4.0 APK
 
 on:
-  push:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "Ardna-v3.4.0-responsive-branding-source.zip"
+      - ".github/workflows/build.yml"
 
 permissions:
   contents: read
 
 jobs:
-  build:
+  build-android:
     runs-on: ubuntu-latest
 
     env:
@@ -18,15 +23,52 @@ jobs:
       VITE_GOOGLE_AUTH_ENABLED: ${{ vars.VITE_GOOGLE_AUTH_ENABLED }}
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Extract Ardna v3.4.0
+        id: project
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ARCHIVE="Ardna-v3.4.0-responsive-branding-source.zip"
+          DESTINATION="$RUNNER_TEMP/ardna-v3.4.0"
+
+          if [[ ! -f "$ARCHIVE" ]]; then
+            echo "::error::لم يتم العثور على $ARCHIVE في جذر المستودع"
+            exit 1
+          fi
+
+          rm -rf "$DESTINATION"
+          mkdir -p "$DESTINATION"
+          unzip -q "$ARCHIVE" -d "$DESTINATION"
+
+          PACKAGE_FILE="$(find "$DESTINATION" \
+            -type f \
+            -name package.json \
+            -not -path "*/node_modules/*" \
+            -print \
+            -quit)"
+
+          if [[ -z "$PACKAGE_FILE" ]]; then
+            echo "::error::لم يتم العثور على package.json داخل الملف المضغوط"
+            exit 1
+          fi
+
+          ROOT="${PACKAGE_FILE%/package.json}"
+
+          echo "Project root: $ROOT"
+          echo "root=$ROOT" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: ${{ steps.project.outputs.root }}/package-lock.json
 
-      - name: Setup Java
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -35,82 +77,85 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Extract project and detect root
-        id: project
-        shell: bash
-        run: |
-          rm -rf project
-          mkdir -p project
-
-          unzip -q Ardna-v3.3.0-global-polish-source.zip -d project
-
-          ROOT="$(find project \
-            -type f \
-            -name package.json \
-            -not -path '*/node_modules/*' \
-            -printf '%h\n' \
-            | head -n 1)"
-
-          if [ -z "$ROOT" ]; then
-            echo "ERROR: package.json not found"
-            exit 1
-          fi
-
-          echo "Detected project root: $ROOT"
-          echo "root=$ROOT" >> "$GITHUB_OUTPUT"
-
       - name: Validate configuration
-        run: |
-          cd "${{ steps.project.outputs.root }}"
-          node scripts/validate-config.mjs
+        working-directory: ${{ steps.project.outputs.root }}
+        run: node scripts/validate-config.mjs
 
       - name: Install dependencies
-        run: |
-          cd "${{ steps.project.outputs.root }}"
-          npm ci
+        working-directory: ${{ steps.project.outputs.root }}
+        run: npm ci
 
-      - name: Run tests
-        run: |
-          cd "${{ steps.project.outputs.root }}"
-          npm test
+      - name: TypeScript check
+        working-directory: ${{ steps.project.outputs.root }}
+        run: npm run typecheck
 
-      - name: Build and sync Android
-        run: |
-          cd "${{ steps.project.outputs.root }}"
-          npm run android:sync
+      - name: Run security and UX tests
+        working-directory: ${{ steps.project.outputs.root }}
+        run: npm test
 
-      - name: Prepare release signing key
+      - name: Build web app and sync Capacitor
+        working-directory: ${{ steps.project.outputs.root }}
+        run: npm run android:sync
+
+      - name: Build Debug APK
+        working-directory: ${{ steps.project.outputs.root }}/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Prepare optional release signing
+        id: signing
+        shell: bash
         env:
+          PROJECT_ROOT: ${{ steps.project.outputs.root }}
           KEYSTORE_BASE64: ${{ secrets.ARDNA_KEYSTORE_BASE64 }}
-          ARDNA_STORE_PASSWORD: ${{ secrets.ARDNA_STORE_PASSWORD }}
-          ARDNA_KEY_ALIAS: ${{ secrets.ARDNA_KEY_ALIAS }}
-          ARDNA_KEY_PASSWORD: ${{ secrets.ARDNA_KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.ARDNA_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ARDNA_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ARDNA_KEY_PASSWORD }}
         run: |
-          test -n "$KEYSTORE_BASE64" || { echo "Missing ARDNA_KEYSTORE_BASE64"; exit 1; }
-          test -n "$ARDNA_STORE_PASSWORD" || { echo "Missing ARDNA_STORE_PASSWORD"; exit 1; }
-          test -n "$ARDNA_KEY_ALIAS" || { echo "Missing ARDNA_KEY_ALIAS"; exit 1; }
-          test -n "$ARDNA_KEY_PASSWORD" || { echo "Missing ARDNA_KEY_PASSWORD"; exit 1; }
+          set -euo pipefail
 
-          printf '%s' "$KEYSTORE_BASE64" |
-            base64 --decode \
-            > "${{ steps.project.outputs.root }}/android/ardna-release.keystore"
+          if [[ -n "$KEYSTORE_BASE64" && \
+                -n "$STORE_PASSWORD" && \
+                -n "$KEY_ALIAS" && \
+                -n "$KEY_PASSWORD" ]]; then
+
+            KEYSTORE_PATH="$PROJECT_ROOT/android/app/ardna-release.jks"
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "keystore_path=$KEYSTORE_PATH" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Signing secrets are incomplete; Debug APK only."
+          fi
 
       - name: Build signed Release APK and AAB
+        if: steps.signing.outputs.enabled == 'true'
+        working-directory: ${{ steps.project.outputs.root }}/android
         env:
-          ARDNA_KEYSTORE_FILE: ${{ github.workspace }}/${{ steps.project.outputs.root }}/android/ardna-release.keystore
+          ARDNA_KEYSTORE_FILE: ${{ steps.signing.outputs.keystore_path }}
           ARDNA_STORE_PASSWORD: ${{ secrets.ARDNA_STORE_PASSWORD }}
           ARDNA_KEY_ALIAS: ${{ secrets.ARDNA_KEY_ALIAS }}
           ARDNA_KEY_PASSWORD: ${{ secrets.ARDNA_KEY_PASSWORD }}
         run: |
-          cd "${{ steps.project.outputs.root }}/android"
-          chmod +x gradlew
           ./gradlew assembleRelease bundleRelease --stacktrace
 
-      - name: Upload signed Android files
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: Ardna-v3.3.0-signed-release
+          name: Ardna-v3.4.0-Debug-APK
+          path: ${{ steps.project.outputs.root }}/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload signed Release APK and AAB
+        if: steps.signing.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ardna-v3.4.0-Signed-Release
           path: |
             ${{ steps.project.outputs.root }}/android/app/build/outputs/apk/release/app-release.apk
             ${{ steps.project.outputs.root }}/android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
+          retention-days: 30
