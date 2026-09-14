@@ -75,9 +75,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: ${{ steps.project.outputs.root }}/package-lock.json
-
+          
       - name: Validate configuration
         working-directory: ${{ steps.project.outputs.root }}
         run: node scripts/validate-config.mjs
