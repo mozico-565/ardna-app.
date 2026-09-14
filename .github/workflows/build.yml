@@ -66,8 +66,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: ${{ steps.project.outputs.root }}/package-lock.json
-
+          
       - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
