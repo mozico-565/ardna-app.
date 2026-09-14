@@ -1,8 +1,13 @@
-name: Publish Ardna Website
+name: Publish Ardna v3.4.0 Website
 
 on:
-  push:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "Ardna-v3.4.0-responsive-branding-source.zip"
+      - ".github/workflows/pages.yml"
 
 permissions:
   contents: read
@@ -10,11 +15,11 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: ardna-pages
   cancel-in-progress: true
 
 jobs:
-  publish:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     environment:
@@ -28,66 +33,79 @@ jobs:
       VITE_GOOGLE_AUTH_ENABLED: ${{ vars.VITE_GOOGLE_AUTH_ENABLED }}
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Extract project and detect root
+      - name: Extract Ardna v3.4.0
         id: project
         shell: bash
         run: |
-          rm -rf project
-          mkdir -p project
+          set -euo pipefail
 
-          unzip -q Ardna-v3.3.0-global-polish-source.zip -d project
+          ARCHIVE="Ardna-v3.4.0-responsive-branding-source.zip"
+          DESTINATION="$RUNNER_TEMP/ardna-v3.4.0"
 
-          ROOT="$(find project \
-            -type f \
-            -name package.json \
-            -not -path '*/node_modules/*' \
-            -printf '%h\n' \
-            | head -n 1)"
-
-          if [ -z "$ROOT" ]; then
-            echo "ERROR: package.json not found"
+          if [[ ! -f "$ARCHIVE" ]]; then
+            echo "::error::لم يتم العثور على $ARCHIVE في جذر المستودع"
             exit 1
           fi
 
-          echo "Detected project root: $ROOT"
+          rm -rf "$DESTINATION"
+          mkdir -p "$DESTINATION"
+          unzip -q "$ARCHIVE" -d "$DESTINATION"
+
+          PACKAGE_FILE="$(find "$DESTINATION" \
+            -type f \
+            -name package.json \
+            -not -path "*/node_modules/*" \
+            -print \
+            -quit)"
+
+          if [[ -z "$PACKAGE_FILE" ]]; then
+            echo "::error::لم يتم العثور على package.json داخل الملف المضغوط"
+            exit 1
+          fi
+
+          ROOT="${PACKAGE_FILE%/package.json}"
+
+          echo "Project root: $ROOT"
           echo "root=$ROOT" >> "$GITHUB_OUTPUT"
 
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ${{ steps.project.outputs.root }}/package-lock.json
+
       - name: Validate configuration
-        run: |
-          cd "${{ steps.project.outputs.root }}"
-          node scripts/validate-config.mjs
+        working-directory: ${{ steps.project.outputs.root }}
+        run: node scripts/validate-config.mjs
 
       - name: Install dependencies
-        run: |
-          cd "${{ steps.project.outputs.root }}"
-          npm ci
+        working-directory: ${{ steps.project.outputs.root }}
+        run: npm ci
 
-      - name: Run tests
-        run: |
-          cd "${{ steps.project.outputs.root }}"
-          npm test
+      - name: TypeScript check
+        working-directory: ${{ steps.project.outputs.root }}
+        run: npm run typecheck
 
-      - name: Build website
-        run: |
-          cd "${{ steps.project.outputs.root }}"
-          npm run build
+      - name: Run security and UX tests
+        working-directory: ${{ steps.project.outputs.root }}
+        run: npm test
 
-      - name: Configure Pages
+      - name: Build production website
+        working-directory: ${{ steps.project.outputs.root }}
+        run: npm run build
+
+      - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload website
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: ${{ steps.project.outputs.root }}/dist
 
-      - name: Publish
+      - name: Deploy GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
