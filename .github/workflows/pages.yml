@@ -1,4 +1,4 @@
-name: Publish Ardna v3.4.0 Website
+name: Publish Ardna v3.5.0 Website
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     branches:
       - main
     paths:
-      - "Ardna-v3.4.0-responsive-branding-source.zip"
+      - "Ardna-v3.5.0-GitHub-Upload.zip"
       - ".github/workflows/pages.yml"
 
 permissions:
@@ -36,14 +36,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract Ardna v3.4.0
+      - name: Extract Ardna v3.5.0
         id: project
         shell: bash
         run: |
           set -euo pipefail
 
-          ARCHIVE="Ardna-v3.4.0-responsive-branding-source.zip"
-          DESTINATION="$RUNNER_TEMP/ardna-v3.4.0"
+          ARCHIVE="Ardna-v3.5.0-GitHub-Upload.zip"
+          DESTINATION="$RUNNER_TEMP/ardna-v3.5.0"
 
           if [[ ! -f "$ARCHIVE" ]]; then
             echo "::error::لم يتم العثور على $ARCHIVE في جذر المستودع"
@@ -75,7 +75,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          
+
       - name: Validate configuration
         working-directory: ${{ steps.project.outputs.root }}
         run: node scripts/validate-config.mjs
@@ -95,6 +95,12 @@ jobs:
       - name: Build production website
         working-directory: ${{ steps.project.outputs.root }}
         run: npm run build
+
+      - name: Add GitHub Pages SPA fallback
+        working-directory: ${{ steps.project.outputs.root }}
+        run: |
+          cp dist/index.html dist/404.html
+          touch dist/.nojekyll
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
