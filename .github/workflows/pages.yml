@@ -1,4 +1,4 @@
-name: Publish Ardna v3.5.0 Website
+name: Publish Ardna v3.6.0 Website
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     branches:
       - main
     paths:
-      - "Ardna-v3.5.0-GitHub-Upload.zip"
+      - "Ardna-v3.6.0-GitHub-Upload.zip"
       - ".github/workflows/pages.yml"
 
 permissions:
@@ -36,14 +36,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract Ardna v3.5.0
+      - name: Extract Ardna v3.6.0
         id: project
         shell: bash
         run: |
           set -euo pipefail
 
-          ARCHIVE="Ardna-v3.5.0-GitHub-Upload.zip"
-          DESTINATION="$RUNNER_TEMP/ardna-v3.5.0"
+          ARCHIVE="Ardna-v3.6.0-GitHub-Upload.zip"
+          DESTINATION="$RUNNER_TEMP/ardna-v3.6.0"
 
           if [[ ! -f "$ARCHIVE" ]]; then
             echo "::error::لم يتم العثور على $ARCHIVE في جذر المستودع"
